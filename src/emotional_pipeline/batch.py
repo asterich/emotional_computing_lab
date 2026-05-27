@@ -157,14 +157,20 @@ class BatchClient:
         request = urllib.request.Request(url, data=request_data, method=method)
         request.add_header("Authorization", f"Bearer {self.config.api_key}")
         request.add_header("Content-Type", content_type)
-        try:
-            with urllib.request.urlopen(request, timeout=60) as response:
-                return response.read()
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"HTTP {exc.code} for {method} {path}: {detail}") from exc
-        except urllib.error.URLError as exc:
-            raise RuntimeError(f"Network error for {method} {path}: {exc}") from exc
+        last_error: Optional[BaseException] = None
+        for attempt in range(1, 4):
+            try:
+                with urllib.request.urlopen(request, timeout=60) as response:
+                    return response.read()
+            except urllib.error.HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="replace")
+                if 400 <= exc.code < 500:
+                    raise RuntimeError(f"HTTP {exc.code} for {method} {path}: {detail}") from exc
+                last_error = RuntimeError(f"HTTP {exc.code} for {method} {path}: {detail}")
+            except (urllib.error.URLError, ConnectionError, TimeoutError) as exc:
+                last_error = exc
+            time.sleep(attempt * 2)
+        raise RuntimeError(f"Network error for {method} {path}: {last_error}") from last_error
 
     @staticmethod
     def _load_state(path: Path) -> Dict[str, object]:
