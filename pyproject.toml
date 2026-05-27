@@ -1,0 +1,20 @@
+[project]
+name = "emotional-computing-lab"
+version = "0.1.0"
+description = "Batch-based open-vocabulary multimodal emotion recognition pipeline for MELD."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+emotional-pipeline = "emotional_pipeline.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+package = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/emotional_pipeline"]
