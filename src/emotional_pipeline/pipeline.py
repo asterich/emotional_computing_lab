@@ -37,12 +37,12 @@ def run_pipeline(
 
     config = api_config(root)
     samples = load_or_create_samples(paths, n=n, seed=seed, allow_demo=demo or allow_fallback)
-    samples = extract_frames_if_possible(samples, paths)
+    samples, frame_summary = extract_frames_if_possible(samples, paths)
     write_csv(paths.data_processed / "sampled_data.csv", samples, SAMPLE_FIELDS)
     write_csv(paths.final_for_b / "sampled_data.csv", samples, SAMPLE_FIELDS)
 
     run_id = now_run_id()
-    requests = build_batch_requests(samples, config.model)
+    requests = build_batch_requests(samples, config.model, root)
     input_path = paths.raw_outputs / "batch_inputs" / f"{run_id}_all_requests.jsonl"
     output_path = paths.raw_outputs / f"{run_id}_batch_output.jsonl"
     write_jsonl(input_path, requests)
@@ -60,13 +60,18 @@ def run_pipeline(
         except Exception as exc:
             api_error = str(exc)
             batch_status = "api_error"
+            if state_path.exists() and "Network error for GET /batches/" in api_error:
+                batch_status = "poll_error_batch_submitted"
     elif use_api and not config.enabled:
         batch_status = "missing_api_config"
 
     if not output_rows:
         if not allow_fallback:
             raise RuntimeError(
-                f"Batch did not produce output rows. status={batch_status}. api_error={api_error}"
+                "Batch did not produce output rows during this command. "
+                f"status={batch_status}. api_error={api_error}. "
+                "If a batch_id exists in logs/pipeline_state.json, rerun "
+                "`uv run emotional-pipeline fetch-batch --poll-seconds 300`."
             )
         samples_by_id = {str(sample["sample_id"]): sample for sample in samples}
         output_rows = demo_batch_outputs(requests, samples_by_id, config.model)
@@ -85,6 +90,7 @@ def run_pipeline(
         "api_error": api_error,
         "batch_input": str(input_path.relative_to(root)),
         "batch_output": str(output_path.relative_to(root)),
+        "frame_extraction": frame_summary,
         "final_for_B": str(paths.final_for_b.relative_to(root)),
         "exports": {key: str(path.relative_to(root)) for key, path in exported.items()},
     }
@@ -92,20 +98,20 @@ def run_pipeline(
     return summary
 
 
-def build_batch_requests(samples: List[Dict[str, object]], model: str) -> List[Dict[str, object]]:
+def build_batch_requests(samples: List[Dict[str, object]], model: str, root: Path) -> List[Dict[str, object]]:
     requests: List[Dict[str, object]] = []
     for sample in samples:
         sample_id = str(sample["sample_id"])
         main_condition = "text + context + image" if sample.get("frame_paths") else "text + context"
         requests.append(
-            batch_line(f"closed_set:{sample_id}:{condition_key(main_condition)}", model, closed_set_messages(sample, main_condition))
+            batch_line(f"closed_set:{sample_id}:{condition_key(main_condition)}", model, closed_set_messages(sample, main_condition, root=root))
         )
         requests.append(
-            batch_line(f"open_vocab:{sample_id}:{condition_key(main_condition)}", model, open_vocab_messages(sample, main_condition))
+            batch_line(f"open_vocab:{sample_id}:{condition_key(main_condition)}", model, open_vocab_messages(sample, main_condition, root=root))
         )
         for condition in PERTURBATION_CONDITIONS:
             requests.append(
-                batch_line(f"perturbation:{sample_id}:{condition_key(condition)}", model, open_vocab_messages(sample, condition))
+                batch_line(f"perturbation:{sample_id}:{condition_key(condition)}", model, open_vocab_messages(sample, condition, root=root))
             )
     return requests
 
@@ -133,6 +139,9 @@ def status(root: Path) -> Dict[str, object]:
     return {
         "last_run_summary": json.loads(summary_path.read_text(encoding="utf-8")) if summary_path.exists() else None,
         "batch_state": json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else None,
+        "frame_extraction": json.loads((paths.logs / "frame_extraction_summary.json").read_text(encoding="utf-8"))
+        if (paths.logs / "frame_extraction_summary.json").exists()
+        else None,
         "final_for_B_exists": paths.final_for_b.exists(),
         "final_for_B_files": sorted(path.name for path in paths.final_for_b.glob("*")) if paths.final_for_b.exists() else [],
     }
@@ -183,13 +192,23 @@ def fetch_pending_batch(root: Path, poll_seconds: int = 300) -> Dict[str, object
     if not samples_path.exists():
         raise RuntimeError("Missing data/processed/sampled_data.csv; cannot parse downloaded batch output.")
     samples = read_csv(samples_path)
-    run_id = str(summary.get("run_id") or "latest")
+    run_id = str(summary.get("run_id") or output_path.name.replace("_batch_output.jsonl", ""))
     write_experiment_raw_outputs(paths, run_id, output_rows)
     exported = parse_and_export(paths, samples, output_rows, config.model)
+    frame_summary_path = paths.logs / "frame_extraction_summary.json"
     updated = {
         **summary,
+        "run_id": run_id,
+        "sample_count": len(samples),
+        "request_count": len(output_rows),
+        "model": config.model,
+        "api_base_url": mask_url(config.base_url),
         "batch_status": status_value,
         "batch_output": str(output_path.relative_to(root)),
+        "frame_extraction": json.loads(frame_summary_path.read_text(encoding="utf-8"))
+        if frame_summary_path.exists()
+        else None,
+        "final_for_B": str(paths.final_for_b.relative_to(root)),
         "downloaded_real_batch": True,
         "exports": {key: str(path.relative_to(root)) for key, path in exported.items()},
     }

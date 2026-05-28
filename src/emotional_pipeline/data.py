@@ -43,9 +43,9 @@ DEMO_ROWS = [
 
 
 def load_or_create_samples(paths: Paths, n: int, seed: int, allow_demo: bool) -> List[Dict[str, object]]:
-    raw_csv = find_meld_csv(paths.data_raw)
-    if raw_csv:
-        rows = sample_meld(raw_csv, paths, n=n, seed=seed)
+    raw_csvs = find_meld_csvs(paths.data_raw)
+    if raw_csvs:
+        rows = sample_meld(raw_csvs, paths, n=n, seed=seed)
     elif allow_demo:
         rows = create_demo_samples(n=n)
     else:
@@ -57,9 +57,9 @@ def load_or_create_samples(paths: Paths, n: int, seed: int, allow_demo: bool) ->
     return rows
 
 
-def find_meld_csv(raw_dir: Path) -> Optional[Path]:
+def find_meld_csvs(raw_dir: Path) -> List[Path]:
     if not raw_dir.exists():
-        return None
+        return []
     candidates = sorted(raw_dir.rglob("*.csv"))
     scored = []
     for path in candidates:
@@ -71,16 +71,28 @@ def find_meld_csv(raw_dir: Path) -> Optional[Path]:
             score += 2
         if "train" in name:
             score += 1
-        scored.append((score, path))
+        if "sent_emo" in name or {"dialogue_id", "utterance_id", "emotion"}.issubset(csv_header_keys(path)):
+            scored.append((score, path))
     if not scored:
-        return None
+        return []
     scored.sort(key=lambda item: (-item[0], str(item[1])))
-    return scored[0][1]
+    return [path for score, path in scored if score >= 2] or [scored[0][1]]
 
 
-def sample_meld(path: Path, paths: Paths, n: int, seed: int) -> List[Dict[str, object]]:
-    raw_rows = read_csv(path)
-    normalized = [normalize_meld_row(row, paths, path) for row in raw_rows]
+def csv_header_keys(path: Path) -> set[str]:
+    try:
+        with path.open("r", encoding="utf-8-sig", newline="") as handle:
+            line = handle.readline()
+    except OSError:
+        return set()
+    return {part.strip().lower().replace(" ", "_") for part in line.split(",")}
+
+
+def sample_meld(csv_paths: List[Path], paths: Paths, n: int, seed: int) -> List[Dict[str, object]]:
+    raw_rows = []
+    for path in csv_paths:
+        raw_rows.extend(normalize_meld_row(row, paths, path) for row in read_csv(path))
+    normalized = raw_rows
     normalized = [row for row in normalized if row["gold_label"] in LABELS and row["utterance"]]
     by_label: Dict[str, List[Dict[str, object]]] = defaultdict(list)
     for row in normalized:
@@ -169,9 +181,15 @@ def find_video_path(raw_dir: Path, split: str, dialogue_id: str, utterance_id: s
         f"dia{dialogue_id}_utt{utterance_id}.mp4",
         f"dia{dialogue_id}_utt{utterance_id}.avi",
     ]
-    search_roots = [raw_dir]
-    if split != "unknown":
-        search_roots.insert(0, raw_dir / split)
+    split_roots = {
+        "dev": ["dev_splits_complete"],
+        "test": ["output_repeated_splits_test", "test_splits_complete"],
+        "train": ["train_splits", "train_splits_complete"],
+    }
+    search_roots = []
+    for dirname in split_roots.get(split, []):
+        search_roots.extend(raw_dir.rglob(dirname))
+    search_roots.append(raw_dir)
     for root in search_roots:
         for name in names:
             matches = list(root.rglob(name)) if root.exists() else []

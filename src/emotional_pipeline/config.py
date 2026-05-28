@@ -7,7 +7,7 @@ from typing import Dict, Iterable, List, Optional
 
 
 LABELS = ["anger", "disgust", "sadness", "joy", "neutral", "surprise", "fear"]
-DEFAULT_MODEL = "qwen-plus"
+DEFAULT_MODEL = "qwen-vl-plus"
 
 
 @dataclass(frozen=True)

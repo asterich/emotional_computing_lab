@@ -14,6 +14,7 @@ uv run emotional-pipeline run --demo --n 21
 uv run emotional-pipeline run --n 300
 uv run emotional-pipeline run --demo --n 21 --no-api
 uv run emotional-pipeline fetch-batch --poll-seconds 300
+uv run emotional-pipeline extract-all-frames
 uv run emotional-pipeline status
 uv run emotional-pipeline clean --artifacts-only
 ```
@@ -23,10 +24,12 @@ uv run emotional-pipeline clean --artifacts-only
 ```bash
 export QWEN_API_KEY="..."
 export QWEN_API_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
-export QWEN_MODEL="qwen-plus"
+export QWEN_MODEL="qwen-vl-plus"
 ```
 
 如果 `data/raw/` 下面没有 MELD CSV，pipeline 会在允许 fallback 时生成 `is_demo=true` 的样本和实验输出，保证交付结构完整。放入真实 MELD CSV 后重新运行即可生成真实样本结果。
+
+关键帧提取是 pipeline 的显式步骤。`run` 会对本次样本的视频用 OpenCV 抽取 25%、50%、75% 三个位置的关键帧，写入 `frames/extracted_frames/{sample_id}/`，并把 `frame_paths` 写回 `sampled_data.csv`。全量 MELD 视频抽帧使用 `extract-all-frames`，输出到 `frames/all_extracted_frames/{split}/{video_id}/`，报告写入 `logs/all_frame_extraction_report.csv` 和 `logs/all_frame_extraction_summary.json`。无视频或无法解码的视频不会伪造图片，原因会写入对应报告。
 
 `run` 会提交 Qwen/DashScope Batch；如果 batch 在轮询时间内还没完成，会先写入 demo fallback 结果，并把 `batch_id` 保存到 `logs/pipeline_state.json`。稍后执行 `uv run emotional-pipeline fetch-batch --poll-seconds 300` 会下载真实 batch 输出并重新生成解析后的 CSV。
 

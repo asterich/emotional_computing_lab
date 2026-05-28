@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 import urllib.error
@@ -30,6 +31,14 @@ def read_jsonl(path: Path) -> List[Dict[str, object]]:
     return rows
 
 
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 class BatchClient:
     def __init__(self, config: ApiConfig):
         self.config = config
@@ -38,14 +47,23 @@ class BatchClient:
         if not self.config.enabled:
             return None
         state = self._load_state(state_path)
-        batch_id = state.get("batch_id")
+        input_hash = file_sha256(input_path)
+        reusable = (
+            state.get("batch_id")
+            and state.get("model") == self.config.model
+            and state.get("input_sha256") == input_hash
+        )
+        batch_id = state.get("batch_id") if reusable else None
         if not batch_id:
+            state = {}
             file_id = self.upload_file(input_path)
             batch = self.create_batch(file_id)
             batch_id = str(batch["id"])
             state.update(
                 {
+                    "model": self.config.model,
                     "input_path": str(input_path),
+                    "input_sha256": input_hash,
                     "output_path": str(output_path),
                     "input_file_id": file_id,
                     "batch_id": batch_id,

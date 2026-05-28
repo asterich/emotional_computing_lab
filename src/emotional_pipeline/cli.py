@@ -4,6 +4,8 @@ import argparse
 import json
 from pathlib import Path
 
+from .config import Paths
+from .frames import extract_all_meld_video_frames
 from .pipeline import clean_artifacts, fetch_pending_batch, run_pipeline, status
 
 
@@ -24,6 +26,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     fetch = subparsers.add_parser("fetch-batch", help="Poll and download the pending Qwen Batch output.")
     fetch.add_argument("--poll-seconds", type=int, default=300, help="How long to poll the existing batch.")
+
+    extract_frames = subparsers.add_parser("extract-all-frames", help="Extract keyframes from every MELD video.")
+    extract_frames.add_argument("--max-frames", type=int, default=3, help="Maximum keyframes per video.")
+    extract_frames.add_argument("--force", action="store_true", help="Regenerate existing extracted frames.")
+    extract_frames.add_argument("--limit", type=int, default=None, help="Optional debug limit.")
 
     clean = subparsers.add_parser("clean", help="Remove generated artifacts.")
     clean.add_argument("--artifacts-only", action="store_true", help="Required safety flag.")
@@ -56,6 +63,16 @@ def main(argv=None) -> int:
 
     if args.command == "fetch-batch":
         print(json.dumps(fetch_pending_batch(root, poll_seconds=args.poll_seconds), ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "extract-all-frames":
+        summary = extract_all_meld_video_frames(
+            Paths.from_root(root),
+            max_frames=args.max_frames,
+            force=args.force,
+            limit=args.limit,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
         return 0
 
     if args.command == "clean":

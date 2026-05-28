@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "Batch-based open-vocabulary multimodal emotion recognition pipeline for MELD."
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "opencv-python-headless>=4.8",
+]
 
 [project.scripts]
 emotional-pipeline = "emotional_pipeline.cli:main"

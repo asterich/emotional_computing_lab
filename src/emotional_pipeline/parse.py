@@ -165,15 +165,19 @@ def base_row(
         "input_condition": condition_text,
         "model_name": model,
         "custom_id": custom_id,
-        "raw_output": raw_output,
+        "raw_output": one_line(raw_output),
         "confidence": "",
         "reason": "",
-        "is_demo": str(raw.get("is_demo", sample.get("is_demo", "false"))).lower(),
+        "is_demo": str(raw.get("is_demo", False)).lower(),
     }
 
 
 def decode_condition(value: str) -> str:
     return value.replace("_plus_", " + ").replace("text_only", "text-only").replace("_", " ")
+
+
+def one_line(value: str) -> str:
+    return value.replace("\r", "\\r").replace("\n", "\\n")
 
 
 def parse_closed(base: Dict[str, object], parsed: Dict[str, object]) -> Dict[str, object]:
