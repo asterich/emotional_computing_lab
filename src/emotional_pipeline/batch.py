@@ -79,7 +79,23 @@ class BatchClient:
         deadline = time.time() + poll_seconds
         last_status = ""
         while time.time() <= deadline:
-            batch = self.get_batch(batch_id)
+            try:
+                batch = self.get_batch(batch_id)
+            except RuntimeError as exc:
+                if "Network error for GET /batches/" not in str(exc):
+                    raise
+                state.update(
+                    {
+                        "batch_id": batch_id,
+                        "output_path": str(output_path),
+                        "last_status": last_status or "poll_network_error",
+                        "last_checked_at": int(time.time()),
+                        "last_poll_error": str(exc),
+                    }
+                )
+                self._save_state(state_path, state)
+                time.sleep(min(10, max(2, poll_seconds // 6 or 2)))
+                continue
             last_status = str(batch.get("status", ""))
             state.update(
                 {

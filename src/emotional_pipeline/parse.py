@@ -197,6 +197,9 @@ def parse_closed(base: Dict[str, object], parsed: Dict[str, object]) -> Dict[str
 
 def parse_open(base: Dict[str, object], parsed: Dict[str, object]) -> Dict[str, object]:
     free = parsed.get("free_emotions") or parsed.get("emotions") or []
+    if not free:
+        parsed = {**extract_open_fields(str(base.get("raw_output", ""))), **parsed}
+        free = parsed.get("free_emotions") or parsed.get("emotions") or []
     normalized = normalize_emotions(free)
     mapped, method, mapping_reason, mapping_confidence = dictionary_map(
         normalized, utterance=str(base.get("utterance", "")), context=str(base.get("context", ""))
@@ -215,6 +218,31 @@ def parse_open(base: Dict[str, object], parsed: Dict[str, object]) -> Dict[str, 
         }
     )
     return base
+
+
+def extract_open_fields(text: str) -> Dict[str, object]:
+    fields: Dict[str, object] = {}
+    emotions_match = re.search(r'"(?:free_emotions|emotions)"\s*:\s*(\[[^\]]*\])', text, flags=re.S)
+    if emotions_match:
+        raw_list = emotions_match.group(1)
+        try:
+            value = json.loads(raw_list)
+            if isinstance(value, list):
+                fields["free_emotions"] = value
+        except json.JSONDecodeError:
+            quoted = re.findall(r'"([^"]+)"', raw_list)
+            if quoted:
+                fields["free_emotions"] = quoted
+    confidence_match = re.search(r'"confidence"\s*:\s*([0-9]*\.?[0-9]+)', text)
+    if confidence_match:
+        fields["confidence"] = confidence_match.group(1)
+    reason_match = re.search(r'"reason"\s*:\s*("(?:\\.|[^"\\])*")', text, flags=re.S)
+    if reason_match:
+        try:
+            fields["reason"] = json.loads(reason_match.group(1))
+        except json.JSONDecodeError:
+            pass
+    return fields
 
 
 def mapping_inputs(open_rows: List[Dict[str, object]]) -> List[Dict[str, object]]:

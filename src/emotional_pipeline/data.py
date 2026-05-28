@@ -3,7 +3,7 @@ from __future__ import annotations
 import random
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from .config import LABELS, Paths
 from .csvio import read_csv, write_csv
@@ -111,11 +111,11 @@ def sample_meld(csv_paths: List[Path], paths: Paths, n: int, seed: int) -> List[
     rng.shuffle(remaining)
     selected.extend(remaining[: max(0, n - len(selected))])
     selected = selected[:n]
-    selected.sort(key=lambda row: (str(row["dialogue_id"]), int_or_zero(row["utterance_id"])))
+    selected.sort(key=lambda row: (str(row["source_split"]), str(row["dialogue_id"]), int_or_zero(row["utterance_id"])))
 
-    context_by_dialogue: Dict[str, List[Dict[str, object]]] = defaultdict(list)
+    context_by_dialogue: Dict[Tuple[str, str], List[Dict[str, object]]] = defaultdict(list)
     for row in normalized:
-        context_by_dialogue[str(row["dialogue_id"])].append(row)
+        context_by_dialogue[dialogue_key(row)].append(row)
     for rows in context_by_dialogue.values():
         rows.sort(key=lambda row: int_or_zero(row["utterance_id"]))
 
@@ -123,7 +123,7 @@ def sample_meld(csv_paths: List[Path], paths: Paths, n: int, seed: int) -> List[
     final_rows = []
     index = 1
     for row in selected:
-        dialogue_rows = context_by_dialogue[str(row["dialogue_id"])]
+        dialogue_rows = context_by_dialogue[dialogue_key(row)]
         row["context"] = build_context(dialogue_rows, int_or_zero(row["utterance_id"]))
         row["sample_id"] = f"S{index:04d}"
         final_rows.append(row)
@@ -154,6 +154,10 @@ def normalize_meld_row(row: Dict[str, str], paths: Paths, source_path: Path) -> 
         "source_split": split,
         "is_demo": "false",
     }
+
+
+def dialogue_key(row: Dict[str, object]) -> Tuple[str, str]:
+    return str(row.get("source_split", "")), str(row.get("dialogue_id", ""))
 
 
 def pick(row: Dict[str, str], names: Iterable[str]) -> str:
