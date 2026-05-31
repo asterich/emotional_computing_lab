@@ -10,6 +10,7 @@ from .config import Paths, api_config, now_run_id
 from .data import SAMPLE_FIELDS, load_or_create_samples
 from .demo import demo_batch_outputs
 from .frames import extract_frames_if_possible
+from .llm_mapping import run_llm_mapping_fallbacks
 from .parse import parse_and_export
 from .prompts import batch_line, closed_set_messages, open_vocab_messages, write_prompt_files
 from .csvio import write_csv
@@ -80,6 +81,12 @@ def run_pipeline(
 
     write_experiment_raw_outputs(paths, run_id, output_rows)
     exported = parse_and_export(paths, samples, output_rows, config.model)
+    llm_mapping_summary = {}
+    if use_api and config.enabled and output_rows:
+        try:
+            llm_mapping_summary = run_llm_mapping_fallbacks(root, poll_seconds=poll_seconds, run_id=run_id)
+        except Exception as exc:
+            llm_mapping_summary = {"batch_status": "error", "error": str(exc)}
     summary = {
         "run_id": run_id,
         "sample_count": len(samples),
@@ -91,6 +98,7 @@ def run_pipeline(
         "batch_input": str(input_path.relative_to(root)),
         "batch_output": str(output_path.relative_to(root)),
         "frame_extraction": frame_summary,
+        "llm_mapping": llm_mapping_summary,
         "final_for_B": str(paths.final_for_b.relative_to(root)),
         "exports": {key: str(path.relative_to(root)) for key, path in exported.items()},
     }
@@ -195,6 +203,10 @@ def fetch_pending_batch(root: Path, poll_seconds: int = 300) -> Dict[str, object
     run_id = str(summary.get("run_id") or output_path.name.replace("_batch_output.jsonl", ""))
     write_experiment_raw_outputs(paths, run_id, output_rows)
     exported = parse_and_export(paths, samples, output_rows, config.model)
+    try:
+        llm_mapping_summary = run_llm_mapping_fallbacks(root, poll_seconds=poll_seconds, run_id=run_id)
+    except Exception as exc:
+        llm_mapping_summary = {"batch_status": "error", "error": str(exc)}
     frame_summary_path = paths.logs / "frame_extraction_summary.json"
     updated = {
         **summary,
@@ -208,6 +220,7 @@ def fetch_pending_batch(root: Path, poll_seconds: int = 300) -> Dict[str, object
         "frame_extraction": json.loads(frame_summary_path.read_text(encoding="utf-8"))
         if frame_summary_path.exists()
         else None,
+        "llm_mapping": llm_mapping_summary,
         "final_for_B": str(paths.final_for_b.relative_to(root)),
         "downloaded_real_batch": True,
         "exports": {key: str(path.relative_to(root)) for key, path in exported.items()},

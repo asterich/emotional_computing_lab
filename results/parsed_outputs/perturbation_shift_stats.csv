@@ -1,4 +1,4 @@
 input_condition,sample_count,accuracy,label_shift_rate,emotion_word_shift_rate
-text + context,300,0.3567,0.2167,0.6433
-text + context + image,300,0.39,,
-text-only,300,0.3733,0.2733,0.78
+text + context,300,0.4233,0.1967,0.65
+text + context + image,300,0.4333,,
+text-only,300,0.41,0.27,0.7633

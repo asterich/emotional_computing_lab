@@ -6,6 +6,8 @@ from pathlib import Path
 
 from .config import Paths
 from .frames import extract_all_meld_video_frames
+from .llm_mapping import run_llm_mapping_fallbacks
+from .mapping_strategies import run_mapping_strategy_experiments
 from .pipeline import clean_artifacts, fetch_pending_batch, run_pipeline, status
 
 
@@ -26,6 +28,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     fetch = subparsers.add_parser("fetch-batch", help="Poll and download the pending Qwen Batch output.")
     fetch.add_argument("--poll-seconds", type=int, default=300, help="How long to poll the existing batch.")
+
+    mapping = subparsers.add_parser("map-fallbacks", help="Run LLM mapping for unresolved open-vocabulary emotions.")
+    mapping.add_argument("--poll-seconds", type=int, default=300, help="How long to poll the mapping batch.")
+
+    strategies = subparsers.add_parser("mapping-strategies", help="Run Dictionary, LLM, and Hybrid mapping strategy experiments.")
+    strategies.add_argument("--poll-seconds", type=int, default=600, help="How long to poll the strategy mapping batch.")
 
     extract_frames = subparsers.add_parser("extract-all-frames", help="Extract keyframes from every MELD video.")
     extract_frames.add_argument("--max-frames", type=int, default=3, help="Maximum keyframes per video.")
@@ -63,6 +71,14 @@ def main(argv=None) -> int:
 
     if args.command == "fetch-batch":
         print(json.dumps(fetch_pending_batch(root, poll_seconds=args.poll_seconds), ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "map-fallbacks":
+        print(json.dumps(run_llm_mapping_fallbacks(root, poll_seconds=args.poll_seconds), ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "mapping-strategies":
+        print(json.dumps(run_mapping_strategy_experiments(root, poll_seconds=args.poll_seconds), ensure_ascii=False, indent=2))
         return 0
 
     if args.command == "extract-all-frames":

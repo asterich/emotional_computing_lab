@@ -1,0 +1,13 @@
+source_experiment,input_condition,mapping_strategy,n,covered,coverage_rate,accuracy,mapping_error_rate,macro_f1,weighted_f1
+open_vocab,text + context + image,dictionary,300,245,0.816667,0.336667,0.663333,0.348043,0.348519
+open_vocab,text + context + image,hybrid,300,300,1.0,0.43,0.57,0.41013,0.411114
+open_vocab,text + context + image,llm,300,285,0.95,0.46,0.54,0.44369,0.444822
+perturbation,text + context,dictionary,300,231,0.77,0.31,0.69,0.326636,0.326813
+perturbation,text + context,hybrid,300,298,0.993333,0.42,0.58,0.401656,0.40224
+perturbation,text + context,llm,300,287,0.956667,0.46,0.54,0.449432,0.450026
+perturbation,text + context + image,dictionary,300,245,0.816667,0.34,0.66,0.35414,0.354514
+perturbation,text + context + image,hybrid,300,299,0.996667,0.433333,0.566667,0.416028,0.416832
+perturbation,text + context + image,llm,300,283,0.943333,0.463333,0.536667,0.450888,0.451904
+perturbation,text-only,dictionary,300,226,0.753333,0.31,0.69,0.323658,0.323884
+perturbation,text-only,hybrid,300,299,0.996667,0.406667,0.593333,0.384931,0.384947
+perturbation,text-only,llm,300,289,0.963333,0.43,0.57,0.415088,0.415392
